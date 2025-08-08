@@ -57,8 +57,9 @@ def convert_json(this_json):
 # convert string/currency number to decimal
 def string_to_decimal(val):
     try:
-        new_val = Decimal(sub(r'[^\d.]', '', val))
-        return new_val
+        cleaned_val = sub(r'[^\d.\-E]', '', val)
+        decimal_val = Decimal(cleaned_val)
+        return decimal_val
     except Exception:
         return None
 
