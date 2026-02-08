@@ -1,5 +1,7 @@
+import re
 import singer
 from tap_linkedin_ads.streams import STREAMS, write_bookmark
+from tap_linkedin_ads.transform import transform_json
 
 LOGGER = singer.get_logger()
 
@@ -66,6 +68,45 @@ def get_page_size(config):
     except Exception:
         raise Exception("The entered page size ({}) is invalid".format(page_size))
 
+def fetch_all_accounts(client):
+    """
+    Fetch all ad accounts from LinkedIn API when accounts are not configured.
+    Returns a list of account IDs.
+    """
+    LOGGER.info('No accounts configured, fetching all available ad accounts')
+    account_list = []
+    
+
+    url = 'https://api.linkedin.com/rest/adAccounts?q=search&pageSize=1000'
+    next_url = url
+
+    while next_url:
+        LOGGER.info('Fetching accounts from: %s', next_url)
+        data = client.get(url=next_url, endpoint='accounts')
+        
+        # Transform the data using the same transform_json function used in normal sync
+        # This ensures URNs are converted to numeric IDs, consistent with configured accounts
+        if 'elements' in data:
+            transformed_data = transform_json(data, 'accounts')
+            for account in transformed_data.get('elements', []):
+                account_id = account.get('id')
+                if account_id:
+                    # account_id should now be numeric after transform_json processing
+                    account_list.append(str(account_id))
+        
+        # Check for next page
+        next_page_token = data.get('metadata', {}).get('nextPageToken', None)
+        if next_page_token:
+            if 'pageToken=' in next_url:
+                next_url = re.sub(r'pageToken=[^&]+', 'pageToken={}'.format(next_page_token), next_url)
+            else:
+                next_url = next_url + "&pageToken={}".format(next_page_token)
+        else:
+            next_url = None
+    
+    LOGGER.info('Fetched %s ad accounts', len(account_list))
+    return account_list
+
 def sync(client, config, catalog, state):
     """
     sync selected streams.
@@ -93,9 +134,16 @@ def sync(client, config, catalog, state):
     last_stream = singer.get_currently_syncing(state)
     LOGGER.info('last/currently syncing stream: %s', last_stream)
 
-    # Get the list of streams(to sync stream itself or its child stream) for which
-    # sync method needs to be called
+
     stream_to_sync = get_streams_to_sync(selected_streams)
+
+    if config.get("accounts"):
+        account_list = config['accounts'].replace(" ", "").split(",")
+        LOGGER.info('Using configured accounts: %s', account_list)
+    else:
+        account_list = fetch_all_accounts(client)
+        if not account_list:
+            LOGGER.warning('No ad accounts found for this LinkedIn Authorization.')
 
     # Loop through all `stream_to_sync` streams
     for stream_name in stream_to_sync:
@@ -103,22 +151,23 @@ def sync(client, config, catalog, state):
 
         # Add appropriate account_filter query parameters based on account_filter type
         account_filter = stream_obj.account_filter
-        if config.get("accounts") and account_filter is not None:
-            account_list = config['accounts'].replace(" ", "").split(",")
-            if len(account_list) > 0:
-                params = stream_obj.params
-                if account_filter == 'search_id_values_param':
-                    # Convert account IDs to URN format
-                    urn_list = ["urn%3Ali%3AsponsoredAccount%3A{}".format(account_id) for account_id in account_list]
-                    # Create the query parameter string
-                    param_value = "(id:(values:List({})))".format(','.join(urn_list))
-                    params['search'] = param_value
-                elif account_filter == 'accounts_param':
-                    for idx, account in enumerate(account_list):
-                        params['accounts[{}]'.format(idx)] = \
-                            'urn:li:sponsoredAccount:{}'.format(account)
-                # Update params of specific stream
-                stream_obj.params = params
+        if account_list and account_filter is not None:
+            params = stream_obj.params
+            if account_filter == 'search_id_values_param':
+                # Convert account IDs to URN format
+                urn_list = ["urn%3Ali%3AsponsoredAccount%3A{}".format(account_id) for account_id in account_list]
+                # Create the query parameter string
+                param_value = "(id:(values:List({})))".format(','.join(urn_list))
+                params['search'] = param_value
+            elif account_filter == 'accounts_param':
+                for idx, account in enumerate(account_list):
+                    params['accounts[{}]'.format(idx)] = \
+                        'urn:li:sponsoredAccount:{}'.format(account)
+            stream_obj.params = params
+        elif account_filter == "accounts_param" and not account_list:
+            raise Exception("No ad accounts found for this LinkedIn Authorization. Cannot sync stream {}.".format(stream_name))
+        # Update params of specific stream
+
 
         LOGGER.info('START Syncing: %s', stream_name)
         update_currently_syncing(state, stream_name)

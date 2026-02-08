@@ -22,3 +22,4 @@ test_configuration.py
 tap_target_commands.sh
 .vscode
 .venv
+.secrets
