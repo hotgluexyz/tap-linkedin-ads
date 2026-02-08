@@ -14,8 +14,7 @@ LOGGER = singer.get_logger()
 REQUEST_TIMEOUT = 300
 
 REQUIRED_CONFIG_KEYS = [
-    'access_token',
-    'user_agent'
+    'access_token'
 ]
 
 
@@ -38,7 +37,7 @@ def main():
                         parsed_args.config.get('access_token'),
                         parsed_args.config_path,
                         REQUEST_TIMEOUT,
-                        parsed_args.config['user_agent']
+                        parsed_args.config.get('user_agent', "hotglue on behalf of user")
                         ) as client:
 
         state = {}
