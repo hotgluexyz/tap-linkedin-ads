@@ -47,7 +47,7 @@ def get_schemas():
 
         # Add additional metadata
         mdata_map = metadata.to_map(mdata)
-        if stream_name in ('ad_analytics_by_campaign', 'ad_analytics_by_creative'):
+        if stream_name.startswith('ad_analytics_'):
             mdata_map[('properties', 'date_range')]['inclusion'] = 'automatic'
             mdata_map[('properties', 'pivot')]['inclusion'] = 'automatic'
             mdata_map[('properties', 'pivot_value')]['inclusion'] = 'automatic'

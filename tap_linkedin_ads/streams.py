@@ -288,7 +288,8 @@ class LinkedInAds:
                       selected_streams,
                       date_window_size,
                       parent_id=None,
-                      account_list=None):
+                      account_list=None,
+                      end_date=None): # pylint: disable=unused-argument
         """
         Sync a specific parent or child endpoint.
         """
@@ -490,7 +491,7 @@ class LinkedInAds:
         # Prepare date window for API call
         window_start_date = last_datetime_dt.date()
         window_end_date = window_start_date + timedelta(days=date_window_size)
-        today = datetime.date.today()
+        today = utils.now().date()
 
         # Reset end_date of date window if it is greater than today
         window_end_date = min(window_end_date, today)
@@ -743,6 +744,163 @@ class AdAnalyticsByCreative(LinkedInAds):
         "count": 10000
     }
 
+class AdAnalyticsReach(LinkedInAds):
+    """
+    Unique reach / audience penetration by campaign for completed weeks and months.
+
+    Uses timeGranularity=ALL over each closed period (not DAILY) so unique-person
+    metrics are not incorrectly summed across days.
+    https://learn.microsoft.com/en-us/linkedin/marketing/integrations/ads-reporting/ads-reporting-schema
+    """
+    tap_stream_id = "ad_analytics_reach"
+    replication_method = "INCREMENTAL"
+    replication_keys = []
+    key_properties = ["campaign_id", "period_type", "start_at"]
+    account_filter = "accounts_param"
+    path = "adAnalytics"
+    data_key = "elements"
+    params = {
+        "q": "analytics",
+        "pivot": "CAMPAIGN",
+        "timeGranularity": "ALL",
+        "count": 10000,
+    }
+
+    @staticmethod
+    def iter_completed_weeks(after_end, end_day):
+        """Yield (monday, sunday) for weeks with sunday > after_end and sunday < end_day."""
+        cursor = after_end + timedelta(days=1)
+        monday = cursor - timedelta(days=cursor.weekday())
+        while True:
+            sunday = monday + timedelta(days=6)
+            if sunday >= end_day:
+                break
+            if sunday > after_end:
+                yield monday, sunday
+            monday = monday + timedelta(days=7)
+
+    @staticmethod
+    def iter_completed_months(after_end, end_day):
+        """Yield (month_start, month_end) for months with end > after_end and end < end_day."""
+        cursor = after_end + timedelta(days=1)
+        year, month = cursor.year, cursor.month
+        while True:
+            month_start = datetime.date(year, month, 1)
+            if month == 12:
+                next_first = datetime.date(year + 1, 1, 1)
+            else:
+                next_first = datetime.date(year, month + 1, 1)
+            month_end = next_first - timedelta(days=1)
+            if month_end >= end_day:
+                break
+            if month_end > after_end:
+                yield month_start, month_end
+            year, month = next_first.year, next_first.month
+
+    def sync_endpoint(self, # pylint: disable=too-many-locals,arguments-differ
+                      client,
+                      catalog,
+                      state,
+                      page_size, # pylint: disable=unused-argument
+                      start_date,
+                      selected_streams, # pylint: disable=unused-argument
+                      date_window_size, # pylint: disable=unused-argument
+                      parent_id=None, # pylint: disable=unused-argument
+                      account_list=None, # pylint: disable=unused-argument
+                      end_date=None):
+        bookmark = self.get_bookmark(state, {})
+        if not isinstance(bookmark, dict):
+            bookmark = {}
+
+        # No state yet: treat config start_date like week/month bookmark ends (exclusive floors).
+        start_day = strptime_to_utc(start_date).date().strftime('%Y-%m-%d')
+        if 'week' not in bookmark:
+            bookmark['week'] = start_day
+        if 'month' not in bookmark:
+            bookmark['month'] = start_day
+
+        #optional config end_date overrides "today" for local period debugging
+        end_day = None
+        if end_date:
+            end_day = strptime_to_utc(end_date).date()
+        else:
+            end_day = utils.now().date()
+
+        week_floor = datetime.datetime.strptime(bookmark['week'], '%Y-%m-%d').date()
+        month_floor = datetime.datetime.strptime(bookmark['month'], '%Y-%m-%d').date()
+
+        periods = (
+            [('week', start, end) for start, end in self.iter_completed_weeks(week_floor, end_day)]
+            + [('month', start, end) for start, end in self.iter_completed_months(month_floor, end_day)]
+        )
+
+        if not periods:
+            LOGGER.info(f'{self.tap_stream_id}: no newly completed weeks/months to sync')
+            return 0, bookmark
+
+        total_records = 0
+        max_week_end = bookmark.get('week')
+        max_month_end = bookmark.get('month')
+
+        for period_type, period_start, period_end in periods:
+            params = {
+                **self.params,
+                'dateRange.start.day': period_start.day,
+                'dateRange.start.month': period_start.month,
+                'dateRange.start.year': period_start.year,
+                'dateRange.end.day': period_end.day,
+                'dateRange.end.month': period_end.month,
+                'dateRange.end.year': period_end.year,
+                # Fixed metric set for this stream (under LinkedIn's ~20 field cap).
+                # Future refactor: drive from catalog selected_fields like sync_ad_analytics.
+                'fields': ('approximateMemberReach,audiencePenetration,impressions,dateRange,pivotValues'),
+            }
+            query_string = '&'.join('%s=%s' % (key, value) for (key, value) in params.items())
+            LOGGER.info(
+                'Syncing %s %s from %s to %s',
+                self.tap_stream_id, period_type, period_start, period_end)
+
+            responses = []
+            for page in sync_analytics_endpoint(client, self.tap_stream_id, self.path, query_string):
+                if page.get(self.data_key):
+                    responses.append(page.get(self.data_key))
+
+            raw_records = merge_responses(params['pivot'], responses)
+            for record in raw_records.values():
+                record['period_type'] = period_type
+
+            time_extracted = utils.now()
+            transformed_data = transform_json(
+                {self.data_key: list(raw_records.values())},
+                self.tap_stream_id)[self.data_key]
+
+            if transformed_data:
+                _, record_count = self.process_records(
+                    catalog=catalog,
+                    records=transformed_data,
+                    time_extracted=time_extracted)
+                total_records += record_count
+                LOGGER.info('%s %s: records processed: %s',
+                            self.tap_stream_id, period_type, record_count)
+            else:
+                LOGGER.info('%s %s: no records', self.tap_stream_id, period_type)
+
+            end_str = period_end.strftime('%Y-%m-%d')
+            if period_type == 'week':
+                if max_week_end is None or end_str > max_week_end:
+                    max_week_end = end_str
+            else:
+                if max_month_end is None or end_str > max_month_end:
+                    max_month_end = end_str
+
+        new_bookmark = {}
+        if max_week_end:
+            new_bookmark['week'] = max_week_end
+        if max_month_end:
+            new_bookmark['month'] = max_month_end
+        write_bookmark(state, new_bookmark, self.tap_stream_id)
+        return total_records, new_bookmark
+
 # Dictionary of the stream classes
 STREAMS = {
     "accounts": Accounts,
@@ -752,5 +910,6 @@ STREAMS = {
     "campaigns": Campaigns,
     "creatives": Creatives,
     "ad_analytics_by_campaign": AdAnalyticsByCampaign,
-    "ad_analytics_by_creative": AdAnalyticsByCreative
+    "ad_analytics_by_creative": AdAnalyticsByCreative,
+    "ad_analytics_reach": AdAnalyticsReach,
 }

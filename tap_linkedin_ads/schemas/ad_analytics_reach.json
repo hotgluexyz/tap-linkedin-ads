@@ -1,0 +1,147 @@
+{
+  "type": [
+    "null",
+    "object"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "approximate_member_reach": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "audience_penetration": {
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "campaign": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "campaign_id": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "date_range": {
+      "type": [
+        "null",
+        "object"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "day": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "month": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "year": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          }
+        },
+        "start": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "day": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "month": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            },
+            "year": {
+              "type": [
+                "null",
+                "integer"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "end_at": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "format": "date-time"
+    },
+    "impressions": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "period_type": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "pivot": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "pivot_value": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "pivot_values": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "start_at": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "format": "date-time"
+    }
+  }
+}
