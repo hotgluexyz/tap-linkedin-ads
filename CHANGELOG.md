@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.0
+  * Add `average_dwell_time` to `ad_analytics_by_campaign` and `ad_analytics_by_creative`
+  * Add `ad_analytics_reach` stream: unique `approximateMemberReach` / `audiencePenetration` by campaign for completed Mon–Sun weeks and calendar months (`timeGranularity=ALL`, `pivot=CAMPAIGN`), with separate week/month bookmarks
+
 ## 2.4.1
   * Bump dependency versions for twistlock compliance
   * Update tests to fix failing circle build

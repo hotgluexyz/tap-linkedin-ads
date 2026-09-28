@@ -112,6 +112,7 @@ def sync(client, config, catalog, state):
     sync selected streams.
     """
     start_date = config['start_date']
+    end_date = config.get('end_date')
     page_size = get_page_size(config)
 
     if config.get('date_window_size'):
@@ -182,7 +183,8 @@ def sync(client, config, catalog, state):
             start_date=start_date,
             selected_streams=selected_streams,
             date_window_size=date_window_size,
-            account_list=account_list)
+            account_list=account_list,
+            end_date=end_date)
 
         # Write parent stream's bookmarks
         if stream_obj.replication_keys and stream_name in selected_streams:

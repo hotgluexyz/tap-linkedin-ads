@@ -107,6 +107,17 @@ This tap:
 - Transformations: Fields camelCase to snake_case. URNs to ids. Unix epoch millisecond integers to date-times. Audit date-times created_at and last_modified_at de-nested. Currency and cost fields strings to decimals. Pivot URN to creative and creative_id.
 - Parent: campaign
 
+[**ad_analytics_reach**](https://learn.microsoft.com/en-us/linkedin/marketing/integrations/ads-reporting/ads-reporting-schema)
+- Endpoint: https://api.linkedin.com/rest/adAnalytics?q=analytics
+- Primary key fields: campaign_id, period_type, start_at
+- Foreign keys: campaign_id (campaigns)
+- Granularity: One record per campaign per completed Monday–Sunday week and per completed calendar month (`period_type` = `week` or `month`)
+- Replication strategy: Incremental by closed period (not daily)
+  - Filter: accounts, `pivot=CAMPAIGN`, `timeGranularity=ALL`, dateRange = exact week or month
+  - Bookmark: `{ "week": "<Sunday YYYY-MM-DD>", "month": "<month-end YYYY-MM-DD>" }` — only newly completed periods are requested; when absent, `start_date` seeds both week/month floors the same way
+  - Metrics: approximate_member_reach, audience_penetration, impressions (unique reach is queried per period; do not sum daily reach)
+- Transformations: Fields camelCase to snake_case. URNs to ids. date_range to start_at/end_at. Pivot URN to campaign and campaign_id.
+
 ## Authentication
 The tap uses a LinkedIn provided **access_token** in the config settings to make API requests. Access tokens expire after 60 days and require a user to manually authenticate again. If the tap receives a 401 invalid token response, the error logs will state that your access token has expired and to re-authenticate your connection to generate a new token.
 This is described more in [LinkedIn OAuth 2.0 Docs](https://docs.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow?context=linkedin/context).
@@ -122,7 +133,7 @@ The API user account should be assigned the following **permissions** for the AP
 - accounts, account_users, video_ads, campaign_groups, campaigns, creatives:
     - r_ads: read ads (Recommended)
     - rw_ads: read-write ads
-- ad_analytics_by_campaign, ad_analytics_by_creative:
+- ad_analytics_by_campaign, ad_analytics_by_creative, ad_analytics_reach:
     - r_ads_reporting: read ads reporting
 
 **NOTE**: Legacy permissions (r_ad_campaigns) have been migrated to the new permissions (r_ads and r_ads_reporting) based on this [permissions mapping](https://docs.microsoft.com/en-us/linkedin/shared/references/migrations/marketing-permissions-migration?context=linkedin/marketing/context). 

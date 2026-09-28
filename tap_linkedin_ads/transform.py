@@ -320,7 +320,7 @@ def transform_data(data_dict, stream_name):
     i = 0
     for record in data_dict['elements']:
         this_dict = record
-        if stream_name.startswith('ad_analytics_by_'):
+        if stream_name.startswith('ad_analytics_'):
             this_dict = transform_analytics(this_dict)
         elif stream_name == 'accounts':
             this_dict = transform_accounts(this_dict)

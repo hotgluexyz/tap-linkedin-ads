@@ -11,6 +11,12 @@
         "integer"
       ]
     },
+    "average_dwell_time": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
     "average_daily_reach_metrics": {
       "type": [
         "null",
