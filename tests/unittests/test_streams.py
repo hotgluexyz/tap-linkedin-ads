@@ -159,7 +159,7 @@ class TestStreamsUtils(unittest.TestCase):
         """
         Test that `shift_sync_window` function move date window properly.
         """
-        expected_start_date = datetime.date(year=2020, month=10, day=1)
+        expected_start_date = datetime.date(year=2020, month=10, day=2)
         expected_end_date = datetime.date(year=2020, month=10, day=31)
         expected_params = {
             'dateRange.start.year': expected_start_date.year,
@@ -343,7 +343,7 @@ class TestLinkedInAds(unittest.TestCase):
         ['test_multiple_record', 1, '2022-08-01T00:00:00Z', {'elements': [{'id': 1}]}]
     ])
     @mock.patch("tap_linkedin_ads.streams.LinkedInAds.process_records")
-    @mock.patch("tap_linkedin_ads.streams.shift_sync_window", return_value=('', '', ''))
+    @mock.patch("tap_linkedin_ads.streams.shift_sync_window", return_value=(datetime.date(2022, 8, 2), datetime.date(2022, 8, 1), {}))
     @mock.patch("tap_linkedin_ads.streams.transform_json")
     @mock.patch("tap_linkedin_ads.streams.sync_analytics_endpoint")
     @mock.patch("tap_linkedin_ads.streams.merge_responses")
